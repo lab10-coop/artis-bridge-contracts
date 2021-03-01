@@ -6,6 +6,7 @@ import "openzeppelin-solidity/contracts/token/ERC20/DetailedERC20.sol";
 import "openzeppelin-solidity/contracts/AddressUtils.sol";
 import "./interfaces/IBurnableMintableERC677Token.sol";
 import "./upgradeable_contracts/Claimable.sol";
+import "openzeppelin-solidity/contracts/introspection/ERC165.sol";
 
 /**
 * @title ERC677BridgeToken
@@ -74,7 +75,10 @@ contract ERC677BridgeToken is IBurnableMintableERC677Token, DetailedERC20, Burna
      * @param _value amount of sent tokens.
      */
     function callAfterTransfer(address _from, address _to, uint256 _value) internal {
-        if (isBridge(_to)) {
+        bool isRegisteredERC677Receiver =
+            (AddressUtils.isContract(_to) && doesContractImplementInterface(_to, ON_TOKEN_TRANSFER)) ? true : false;
+
+        if (isBridge(_to) || isRegisteredERC677Receiver) {
             require(contractFallback(_from, _to, _value, new bytes(0)));
         }
     }
@@ -117,5 +121,52 @@ contract ERC677BridgeToken is IBurnableMintableERC677Token, DetailedERC20, Burna
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
         return super.decreaseApproval(spender, subtractedValue);
+    }
+
+    // ==================== ERC165 Checker =======================
+
+    // source: https://eips.ethereum.org/EIPS/eip-165
+    bytes4 constant InvalidID = 0xffffffff;
+    bytes4 constant ERC165ID = 0x01ffc9a7;
+
+    function doesContractImplementInterface(address _contract, bytes4 _interfaceId) constant internal returns (bool) {
+        uint256 success;
+        uint256 result;
+
+        (success, result) = noThrowCall(_contract, ERC165ID);
+        if ((success==0)||(result==0)) {
+            return false;
+        }
+
+        (success, result) = noThrowCall(_contract, InvalidID);
+        if ((success==0)||(result!=0)) {
+            return false;
+        }
+
+        (success, result) = noThrowCall(_contract, _interfaceId);
+        if ((success==1)&&(result==1)) {
+            return true;
+        }
+        return false;
+    }
+
+    function noThrowCall(address _contract, bytes4 _interfaceId) constant internal returns (uint256 success, uint256 result) {
+        bytes4 erc165ID = ERC165ID;
+
+        assembly {
+            let x := mload(0x40)               // Find empty storage location using "free memory pointer"
+            mstore(x, erc165ID)                // Place signature at beginning of empty storage
+            mstore(add(x, 0x04), _interfaceId) // Place first argument directly next to signature
+
+            success := staticcall(
+            30000,         // 30k gas
+            _contract,     // To addr
+            x,             // Inputs are stored at location x
+            0x24,          // Inputs are 36 bytes long
+            x,             // Store output over input (saves space)
+            0x20)          // Outputs are 32 bytes long
+
+            result := mload(x)                 // Load the result
+        }
     }
 }
