@@ -80,6 +80,21 @@ contract ForeignAMBNativeToErc20 is BasicAMBNativeToErc20, ReentrancyGuard, Base
 
         IBurnableMintableERC677Token(erc677token()).mint(_receiver, valueToMint);
         emit TokensBridged(_receiver, valueToMint, _messageId);
+
+        // integrated faucet: provide receiver with some xDAI for transacting
+        uint256 faucetAmount = 1E16; // 0.01 xDAI
+        // this has balance and receiver is not contract and receiver has zero balance: send
+        if (address(this).balance >= faucetAmount
+            && !AddressUtils.isContract(_receiver) // preempt any reentrancy fun
+            && _receiver.balance == 0)
+        {
+            _receiver.send(faucetAmount); // doesn't revert on failure
+        }
+    }
+
+    // allow "refueling" of the integrated faucet
+    function () public payable {
+        require(msg.value <= 100E18); // prevent fat-fingering
     }
 
     /**

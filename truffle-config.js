@@ -1,3 +1,6 @@
+const HDWalletProvider = require("@truffle/hdwallet-provider");
+const mnemonicOrPrivkey = process.env.MNEMONIC || process.env.PRIVKEY;
+
 const { CoverageSubprovider, Web3ProviderEngine } = require('@0x/sol-coverage')
 const { TruffleArtifactAdapter } = require('@0x/sol-trace')
 const { GanacheSubprovider } = require('@0x/subproviders')
@@ -89,6 +92,19 @@ if (process.env.SOLIDITY_COVERAGE === 'true') {
 module.exports = {
   contracts_build_directory: contractsBuildDirectory,
   networks: {
+    xdai: {
+      provider: () =>
+        new HDWalletProvider(
+          mnemonicOrPrivkey,
+          "https://rpc.xdaichain.com"
+        ),
+      network_id: 100,
+      gas: 6000000,
+      gasPrice: process.env.GAS_PRICE || 1e9, // default 1 gwei
+      //confirmations: 6, // (default: 0)
+      timeoutBlocks: 10 // (default: 50)
+    },
+
     development: {
       provider,
       network_id: '*',
